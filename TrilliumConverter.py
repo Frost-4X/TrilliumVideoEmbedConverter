@@ -11,7 +11,7 @@ import argparse
 import shutil
 from pathlib import Path
 from bs4 import BeautifulSoup
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 
 def meaningful_text(p_tag):
@@ -32,27 +32,21 @@ def process_file(path: Path, backup: bool = True) -> int:
     soup = BeautifulSoup(html, "html.parser")
 
     replaced = 0
-    sections = list(soup.find_all("section", class_="include-note"))
-    for sec in sections:
-        # find previous meaningful <p> sibling
-        prev = sec.find_previous_sibling()
-        # walk backwards until we find a <p> or run out
-        while prev is not None and prev.name != "p":
-            prev = prev.find_previous_sibling()
-
-        filename_base = meaningful_text(prev) if prev is not None else None
-        if not filename_base:
-            # no usable filename above this include-note; skip
+    # Find all anchor links that reference .mp4 files and have class "reference-link".
+    anchors = list(soup.find_all("a", class_="reference-link"))
+    for a in anchors:
+        href = a.get("href")
+        if not href:
             continue
 
-        # strip extension if present
-        if filename_base.lower().endswith(".mp4"):
-            filename_base = filename_base[: -4]
+        # Check for .mp4 in the (possibly percent-encoded) href
+        if ".mp4" not in unquote(href).lower():
+            continue
 
-        # Videos are stored in a folder that matches the HTML filename (without ext)
-        media_folder = path.stem
-        # URL-encode components to handle spaces and special chars
-        video_src = f"{quote(media_folder)}/{quote(filename_base)}.mp4"
+        # Normalize/encode the href so it is safe to use as video src.
+        # Preserve existing path separators.
+        href_unquoted = unquote(href)
+        video_src = quote(href_unquoted, safe="/")
 
         # build figure/video
         figure = soup.new_tag("figure", **{"class": "video"})
@@ -61,13 +55,17 @@ def process_file(path: Path, backup: bool = True) -> int:
         source = soup.new_tag("source", src=video_src, type="video/mp4")
         video.append(source)
         fallback = soup.new_string(
-            f"Your browser does not support the video tag. You can download the video.")
+            "Your browser does not support the video tag. You can download the video.")
         video.append(fallback)
         figure.append(video)
 
-        # replace the <p> with the figure, and remove the section
-        prev.replace_with(figure)
-        sec.decompose()
+        # If the anchor is wrapped in a <p>, replace the entire <p>, otherwise replace the anchor.
+        parent = a.parent
+        if parent and parent.name == "p":
+            parent.replace_with(figure)
+        else:
+            a.replace_with(figure)
+
         replaced += 1
 
     if replaced:

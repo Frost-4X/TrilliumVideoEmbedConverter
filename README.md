@@ -1,13 +1,19 @@
 # TrilliumVideoEmbedConverter
 
-Converts includeded notes that contain video attachments, into embedded videos in the HTML archive export.
+Converts Trilium-linked video references into embedded HTML5 videos in exported HTML.
 
 ## What it does
 
-Scans an exported Trilium HTML file for <section class="include-note"> placeholders,
-takes the text from the <p> directly above each placeholder (expects the filename
-without extension), and replaces both the <p> and the placeholder with an HTML5
-video embed using `{filename}.mp4`.
+Older exports used <section class="include-note"> placeholders where the video
+filename appeared in the `<p>` immediately above the section. This tool used that
+pattern to construct `{filename}.mp4` and replace the `<p>` + `<section>` with a
+video embed.
+
+Newer Trilium exports place video attachments as regular links. The script now
+searches for anchors like `<a class="reference-link" href="...mp4">` (it
+decodes the href and checks for `.mp4`), then replaces the anchor — or the
+wrapping `<p>` if present — with a `<figure><video>` embed using the anchor's
+`href` as the `src` (the href is URL-normalized when necessary).
 
 ## Setup
 
@@ -49,14 +55,20 @@ python TrilliumConverter.py "D:/Downloads/HtmlArchive.zip"
 
 ## Example
 
-If your HTML contains:
+If your HTML contains a linked video (new approach):
 
 ```html
-<p>Video Name</p>
-<section class="include-note" data-note-id="asdfasdf"></section>
+<p>
+	<a
+		class="reference-link"
+		href="Evidence%20Journal/Proxy%20Mech%20Legs%20IK%20Setup.mp4"
+		>Proxy Mech Legs IK Setup</a
+	>
+</p>
 ```
 
-The script will replace them with a video referencing `Video Name.mp4`.
+The script will replace the `<p><a>` with a `<figure>` containing a `<video>` whose
+`<source src="...mp4">` matches the link's href.
 
 ## Notes
 
